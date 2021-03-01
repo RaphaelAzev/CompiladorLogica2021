@@ -13,19 +13,26 @@ def get_type(token):
 def main():
     operation = sys.argv[1]
     #operation = '3+3+3'
+    if operation == '':
+        raise ValueError('ERRO: nao existe operacao')
     result = 0
     number = ""
     x = 0
     op_flag = "PLUS"
     while x in range(len(operation)):
-        while (x != len(operation) and get_type(operation[x]) == "SPACE"):
-            x += 1
+        
         while (x != len(operation) and get_type(operation[x]) == "INT"):
             number = number + operation[x]
             x += 1
-       
-        if x != len(operation) and get_type(operation[x]) == "INT":
-            raise ValueError('ERRO numeros com espaco entre eles')
+            while (x != len(operation) and get_type(operation[x]) == "SPACE"):
+                x += 1
+                if x != len(operation) and get_type(operation[x]) == "INT":
+                    raise ValueError('ERRO numeros com espaco entre eles sem operadores')
+
+
+        while (x != len(operation) and get_type(operation[x]) == "SPACE"):
+            x += 1
+    
 
         if (number != "" and op_flag == "PLUS"):
             result += int(number)
@@ -46,6 +53,9 @@ def main():
                 raise ValueError('ERRO: operadores em sequencia')
             op_flag = "MINUS"
             x += 1
+
+    if (op_flag != None):
+        raise ValueError('ERRO: Operador nao consumido')
 
     print(result)
         
