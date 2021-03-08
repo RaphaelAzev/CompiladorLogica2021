@@ -15,6 +15,10 @@ def main():
     #operation = '3+3+3'
     if operation == '':
         raise ValueError('ERRO: nao existe operacao')
+    else:
+        for x in range(len(operation)):
+            if get_type(operation[x]) not in ["INT", "PLUS", "MINUS", "SPACE"]:
+                raise ValueError('ERRO: operador nao valido ')
     result = 0
     number = ""
     x = 0
