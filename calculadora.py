@@ -1,5 +1,6 @@
 import re
 import sys
+import pyparsing
 
 Operators = ["+", "-"]
 
@@ -12,6 +13,11 @@ def get_type(token):
             return "MINUS"
         elif(token == " "):
             return "SPACE"
+        elif(token == "*"):
+            return "MULT"
+        elif(token == "/"):
+            return "DIV"
+        
 
 
 class Token:
@@ -58,41 +64,72 @@ class Parser():
     def parseExpression():
         Parser.tokens.selectNext()
 
+        result = Parser.parseTerm()
+
+        while(Parser.tokens.actual.type == "PLUS" or Parser.tokens.actual.type == "MINUS"):
+            if Parser.tokens.actual.type == "PLUS":
+                Parser.tokens.selectNext()
+                if(Parser.tokens.actual.type == "INT"):
+                    result += Parser.parseTerm()
+                else:
+                    raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+
+            if Parser.tokens.actual.type == "MINUS":
+                Parser.tokens.selectNext()
+                if(Parser.tokens.actual.type == "INT"):
+                    result -= Parser.parseTerm()
+                else:
+                    raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+
+            Parser.tokens.selectNext()
+        if Parser.tokens.actual.type == "EOF":
+            return result
+        else:
+            raise Exception('ERRO: Numero inteiro nao e seguido de um token valido')
+    
+    @staticmethod
+    def parseTerm():
+
         if(Parser.tokens.actual.type == "INT"):
             result = int(Parser.tokens.actual.value)
             Parser.tokens.selectNext()
 
-            while(Parser.tokens.actual.type == "PLUS" or Parser.tokens.actual.type == "MINUS"):
-                if Parser.tokens.actual.type == "PLUS":
+            while(Parser.tokens.actual.type == "MULT" or Parser.tokens.actual.type == "DIV"):
+                if Parser.tokens.actual.type == "MULT":
                     Parser.tokens.selectNext()
                     if(Parser.tokens.actual.type == "INT"):
-                        result += int(Parser.tokens.actual.value)
+                        result *= int(Parser.tokens.actual.value)
                     else:
-                        raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+                        raise Exception('ERRO')
 
-                if Parser.tokens.actual.type == "MINUS":
+                if Parser.tokens.actual.type == "DIV":
                     Parser.tokens.selectNext()
                     if(Parser.tokens.actual.type == "INT"):
-                        result -= int(Parser.tokens.actual.value)
+                        result /= int(Parser.tokens.actual.value)
+                        result = int(result)
                     else:
-                        raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+                        raise Exception('ERRO')
 
                 Parser.tokens.selectNext()
-            if Parser.tokens.actual.type == "EOF":
-                return result
-            else:
-                raise Exception('ERRO: Numero inteiro nao e seguido de um token valido')
+
+            return result
+
         else:
-            raise Exception('ERRO: Operacao nao inicia com numero')
-        
+            raise Exception('ERRO')
+
     @staticmethod
     def run(code):
-        Parser.tokens = Parser().tokens(origem = code) 
+        nocommentstring = PrePro.filter(code)
+        Parser.tokens = Parser().tokens(origem = nocommentstring) 
 
 
         return Parser().parseExpression()
     
-
+class PrePro():
+    @staticmethod
+    def filter(code):
+        nocommentstring = pyparsing.nestedExpr("/*", "*/").suppress()
+        return nocommentstring.transformString(code)
         
 
 def main():
