@@ -2,7 +2,7 @@ import re
 import sys
 import pyparsing
 
-Operators = ["+", "-"]
+Operators = ["+", "-", "*", "/"]
 
 def get_type(token):
         if(token.isdigit() == True):
@@ -81,7 +81,7 @@ class Parser():
                 else:
                     raise Exception('ERRO: Operador binario nao e seguido de um token valido')
 
-            Parser.tokens.selectNext()
+            #Parser.tokens.selectNext()
         if Parser.tokens.actual.type == "EOF":
             return result
         else:
@@ -128,8 +128,8 @@ class Parser():
 class PrePro():
     @staticmethod
     def filter(code):
-        nocommentstring = pyparsing.nestedExpr("/*", "*/").suppress()
-        return nocommentstring.transformString(code)
+        nocommentstring = re.sub(re.compile("/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/",re.DOTALL ) ,"" ,code)
+        return nocommentstring
         
 
 def main():
