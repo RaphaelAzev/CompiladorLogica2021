@@ -2,7 +2,7 @@ import re
 import sys
 import pyparsing
 
-Operators = ["+", "-", "*", "/"]
+Operators = ["+", "-", "*", "/", "(", ")"]
 
 def get_type(token):
         if(token.isdigit() == True):
@@ -17,6 +17,10 @@ def get_type(token):
             return "MULT"
         elif(token == "/"):
             return "DIV"
+        elif(token == "("):
+            return "OPENBR"
+        elif(token == ")"):
+            return "CLOSEBR"   
         
 
 
@@ -62,68 +66,74 @@ class Parser():
 
     @staticmethod
     def parseExpression():
-        Parser.tokens.selectNext()
-
+        
         result = Parser.parseTerm()
 
         while(Parser.tokens.actual.type == "PLUS" or Parser.tokens.actual.type == "MINUS"):
             if Parser.tokens.actual.type == "PLUS":
-                Parser.tokens.selectNext()
-                if(Parser.tokens.actual.type == "INT"):
-                    result += Parser.parseTerm()
-                else:
-                    raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+                result += Parser.parseTerm()
 
             if Parser.tokens.actual.type == "MINUS":
-                Parser.tokens.selectNext()
-                if(Parser.tokens.actual.type == "INT"):
-                    result -= Parser.parseTerm()
-                else:
-                    raise Exception('ERRO: Operador binario nao e seguido de um token valido')
+                result -= Parser.parseTerm()
 
             #Parser.tokens.selectNext()
-        if Parser.tokens.actual.type == "EOF":
-            return result
-        else:
-            raise Exception('ERRO: Numero inteiro nao e seguido de um token valido')
+
+        return result
     
     @staticmethod
     def parseTerm():
+
+        result = Parser.parseFactor()
+
+        while(Parser.tokens.actual.type == "MULT" or Parser.tokens.actual.type == "DIV"):
+            if Parser.tokens.actual.type == "MULT":
+                result *= int(Parser.parseFactor())
+
+            if Parser.tokens.actual.type == "DIV":
+                result /= int(Parser.parseFactor())
+                result = int(result)
+
+
+        return result
+
+    @staticmethod
+    def parseFactor():
+
+        Parser.tokens.selectNext()
 
         if(Parser.tokens.actual.type == "INT"):
             result = int(Parser.tokens.actual.value)
             Parser.tokens.selectNext()
 
-            while(Parser.tokens.actual.type == "MULT" or Parser.tokens.actual.type == "DIV"):
-                if Parser.tokens.actual.type == "MULT":
-                    Parser.tokens.selectNext()
-                    if(Parser.tokens.actual.type == "INT"):
-                        result *= int(Parser.tokens.actual.value)
-                    else:
-                        raise Exception('ERRO')
+        elif Parser.tokens.actual.type == "PLUS":
+            result = Parser.parseFactor() * 1
 
-                if Parser.tokens.actual.type == "DIV":
-                    Parser.tokens.selectNext()
-                    if(Parser.tokens.actual.type == "INT"):
-                        result /= int(Parser.tokens.actual.value)
-                        result = int(result)
-                    else:
-                        raise Exception('ERRO')
+        elif Parser.tokens.actual.type == "MINUS":
+            result = Parser.parseFactor() * -1
 
-                Parser.tokens.selectNext()
+        elif(Parser.tokens.actual.type == "OPENBR"):
+            result = Parser.parseExpression()
+            if Parser.tokens.actual.type != "CLOSEBR":
+                raise Exception('ERRO')
 
-            return result
-
+            Parser.tokens.selectNext()
+        
         else:
             raise Exception('ERRO')
+
+        return result
 
     @staticmethod
     def run(code):
         nocommentstring = PrePro.filter(code)
         Parser.tokens = Parser().tokens(origem = nocommentstring) 
 
+        compiled = Parser().parseExpression()
 
-        return Parser().parseExpression()
+        if Parser.tokens.actual.type == "EOF":
+            return compiled
+        else:
+            raise Exception('ERRO')
     
 class PrePro():
     @staticmethod
