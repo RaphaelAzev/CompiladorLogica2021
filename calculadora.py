@@ -22,7 +22,42 @@ def get_type(token):
         elif(token == ")"):
             return "CLOSEBR"   
         
+class Node():
+    def __init__(self, val = None, nodelist = None):
+        self.value = val
+        self.children = nodelist
 
+    def Evaluate(self):
+        pass
+
+class BinOp(Node):
+    def Evaluate(self):
+        if (self.value == '*'):
+            return self.children[0].Evaluate() * self.children[1].Evaluate()
+        if (self.value == '/'):
+            return self.children[0].Evaluate() // self.children[1].Evaluate()
+        if (self.value == '+'):
+            return self.children[0].Evaluate() + self.children[1].Evaluate()
+        if (self.value == '-'):
+            return self.children[0].Evaluate() - self.children[1].Evaluate()
+
+class UnOp(Node):
+    def Evaluate(self):
+        if (self.value == '+'):
+            return +(self.children[0].Evaluate())
+        if (self.value == '-'):
+            return -(self.children[0].Evaluate())
+
+class IntVal(Node):
+    def Evaluate(self):
+        return int(self.value)
+
+class NoOp(Node):
+    def __init__(self):
+        pass
+
+    def Evaluate(self):
+        pass
 
 class Token:
     def __init__(self, typetoken = None, valor = None):
@@ -71,10 +106,10 @@ class Parser():
 
         while(Parser.tokens.actual.type == "PLUS" or Parser.tokens.actual.type == "MINUS"):
             if Parser.tokens.actual.type == "PLUS":
-                result += Parser.parseTerm()
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseTerm()])
 
             if Parser.tokens.actual.type == "MINUS":
-                result -= Parser.parseTerm()
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseTerm()])
 
             #Parser.tokens.selectNext()
 
@@ -87,11 +122,10 @@ class Parser():
 
         while(Parser.tokens.actual.type == "MULT" or Parser.tokens.actual.type == "DIV"):
             if Parser.tokens.actual.type == "MULT":
-                result *= int(Parser.parseFactor())
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseFactor()])
 
             if Parser.tokens.actual.type == "DIV":
-                result /= int(Parser.parseFactor())
-                result = int(result)
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseFactor()])
 
 
         return result
@@ -102,14 +136,14 @@ class Parser():
         Parser.tokens.selectNext()
 
         if(Parser.tokens.actual.type == "INT"):
-            result = int(Parser.tokens.actual.value)
+            result = IntVal(Parser.tokens.actual.value)
             Parser.tokens.selectNext()
 
         elif Parser.tokens.actual.type == "PLUS":
-            result = Parser.parseFactor() * 1
+            result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
 
         elif Parser.tokens.actual.type == "MINUS":
-            result = Parser.parseFactor() * -1
+            result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
 
         elif(Parser.tokens.actual.type == "OPENBR"):
             result = Parser.parseExpression()
@@ -125,7 +159,7 @@ class Parser():
 
     @staticmethod
     def run(code):
-        nocommentstring = PrePro.filter(code)
+        nocommentstring = PrePro.filter(code.rstrip('\n'))
         Parser.tokens = Parser().tokens(origem = nocommentstring) 
 
         compiled = Parser().parseExpression()
@@ -143,10 +177,14 @@ class PrePro():
         
 
 def main():
+    c_file = sys.argv[1]
+    with open (c_file, 'r') as file:
+        program = file.read()
+
     if(len(sys.argv) < 2):
         raise Exception("Nao foi passado argumento pro arquivo")
-    
-    print(Parser().run(sys.argv[1]))
+
+    print(Parser().run(program).Evaluate())
 
 
 if __name__ == "__main__":
