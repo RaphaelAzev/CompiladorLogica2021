@@ -1,6 +1,5 @@
 import re
 import sys
-import pyparsing
 
 Operators = ["+", "-", "*", "/", "(", ")", "="]
 Reserved = ["println"]
