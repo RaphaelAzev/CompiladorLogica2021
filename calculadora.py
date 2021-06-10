@@ -126,10 +126,10 @@ class Tokenizer:
                     text += self.origin[self.position]
                     self.position += 1
                 
-                if text.lower() not in Reserved:
+                if text not in Reserved:
                     self.actual = Token("identifier", text)
                 else:
-                    self.actual = Token(text.lower(),text.lower())
+                    self.actual = Token(text,text)
 
             else:
                 self.actual = Token(valor = self.origin[self.position], typetoken = get_type(self.origin[self.position]))
