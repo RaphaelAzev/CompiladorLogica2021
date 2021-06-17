@@ -85,32 +85,35 @@ class Node():
 class BinOp(Node):
     def Evaluate(self, symbtable):
         # Checa se esta dentro da combinacao de tipos permitida
-        cond1 = (self.children[0].Evaluate(symbtable)[1] in ["int", "bool"] 
-                and self.children[1].Evaluate(symbtable)[1] == "string")
-        cond2 = (self.children[0].Evaluate(symbtable)[1] == "string" 
-                and self.children[1].Evaluate(symbtable)[1] in ["int", "bool"])
+
+        var1 = self.children[0].Evaluate(symbtable)
+        var2 = self.children[1].Evaluate(symbtable)
+        cond1 = (var1[1] in ["int", "bool"] 
+                and var2[1] == "string")
+        cond2 = (var1[1] == "string" 
+                and var2[1] in ["int", "bool"])
 
         if (cond1 or cond2):
-            raise ValueError(f"ERRO: Nao se pode operar {self.children[0].Evaluate(symbtable)[1]} com {self.children[1].Evaluate(symbtable)[1]}")
+            raise ValueError(f"ERRO: Nao se pode operar {var1[1]} com {var2[1]}")
 
         if (self.value == '*'):
-            return (self.children[0].Evaluate(symbtable)[0] * self.children[1].Evaluate(symbtable)[0], "int")
+            return (var1[0] * var2[0], "int")
         elif (self.value == '/'):
-            return (self.children[0].Evaluate(symbtable)[0] // self.children[1].Evaluate(symbtable)[0], "int")
+            return (var1[0] // var2[0], "int")
         elif (self.value == '+'):
-            return (self.children[0].Evaluate(symbtable)[0] + self.children[1].Evaluate(symbtable)[0], "int")
+            return (var1[0] + var2[0], "int")
         elif (self.value == '-'):
-            return (self.children[0].Evaluate(symbtable)[0] - self.children[1].Evaluate(symbtable)[0], "int")
+            return (var1[0] - var2[0], "int")
         elif (self.value == '<'):
-            return (self.children[0].Evaluate(symbtable)[0] < self.children[1].Evaluate(symbtable)[0], "bool")
+            return (var1[0] < var2[0], "bool")
         elif (self.value == '>'):
-            return (self.children[0].Evaluate(symbtable)[0] > self.children[1].Evaluate(symbtable)[0], "bool")
+            return (var1[0] > var2[0], "bool")
         elif self.value == "==":
-            return (self.children[0].Evaluate(symbtable)[0] == self.children[1].Evaluate(symbtable)[0], "bool")
+            return (var1[0] == var2[0], "bool")
         elif self.value == "&&":
-            return (self.children[0].Evaluate(symbtable)[0] and self.children[1].Evaluate(symbtable)[0], "bool")
+            return (var1[0] and var2[0], "bool")
         elif self.value == "||":
-            return (self.children[0].Evaluate(symbtable)[0] or self.children[1].Evaluate(symbtable)[0], "bool")
+            return (var1[0] or var2[0], "bool")
 
 class UnOp(Node):
     def Evaluate(self, symbtable):
@@ -171,12 +174,12 @@ class NoOp(Node):
 
 class WhileNode(Node): 
     def Evaluate(self, symbtable):
-        while self.children[0].Evaluate(symbtable) == True:
+        while self.children[0].Evaluate(symbtable)[1] == True:
             self.children[1].Evaluate(symbtable)
         
 class IfNode(Node): 
     def Evaluate(self, symbtable):
-        if self.children[0].Evaluate(symbtable) == True:
+        if self.children[0].Evaluate(symbtable)[0] == True:
             self.children[1].Evaluate(symbtable) 
         # Checa se tem else e roda ele
         elif len(self.children) == 3:
