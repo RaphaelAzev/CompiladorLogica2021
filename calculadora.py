@@ -302,7 +302,7 @@ class Parser():
 
         while(Parser.tokens.actual.type == "OR"):
             if Parser.tokens.actual.type == "OR":
-                return BinOp(Parser.tokens.actual.value, [result, Parser.parseAndExpression()])
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseAndExpression()])
         
         return result
         
@@ -313,7 +313,7 @@ class Parser():
 
         while(Parser.tokens.actual.type == "AND"):
             if Parser.tokens.actual.type == "AND":
-                return BinOp(Parser.tokens.actual.value, [result, Parser.parseEqExpression()])
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseEqExpression()])
 
         return result
 
@@ -324,7 +324,7 @@ class Parser():
 
         while(Parser.tokens.actual.type == "EQUAL"):
             if Parser.tokens.actual.type == "EQUAL":
-                return BinOp(Parser.tokens.actual.value, [result, Parser.parseRelExpression()])
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseRelExpression()])
 
         return result
 
@@ -336,10 +336,10 @@ class Parser():
 
         while(Parser.tokens.actual.type == "GREATER" or Parser.tokens.actual.type == "LESSER"):
             if Parser.tokens.actual.type == "GREATER":
-                return BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])
             
             if Parser.tokens.actual.type == "LESSER":
-                return BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])\
+                result = BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])
         
         return result
 
@@ -400,7 +400,7 @@ class Parser():
             result = Identifier(Parser.tokens.actual.value)
             Parser.tokens.selectNext()
 
-        elif Parser.tokens.actual.type == "NOT":
+        elif Parser.tokens.actual.type == "NEG":
             result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
 
         elif(Parser.tokens.actual.type == "readln"):
