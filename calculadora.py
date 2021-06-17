@@ -188,6 +188,8 @@ class WhileNode(Node):
         
 class IfNode(Node): 
     def Evaluate(self, symbtable):
+        if (self.children[0].Evaluate(symbtable)[1] == "string"):
+            raise ValueError("ERRO: IF nao pode ser com somente uma string")
         if bool(self.children[0].Evaluate(symbtable)[0]) == True:
             self.children[1].Evaluate(symbtable) 
         # Checa se tem else e roda ele
@@ -200,6 +202,7 @@ class BoolVal(Node):
             return (True, "bool")
         else:
             return (False, "bool")
+
 class StringVal(Node):        
     def Evaluate(self,symbtable):
         return (self.value, "string")
