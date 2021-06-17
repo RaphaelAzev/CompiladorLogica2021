@@ -1,9 +1,12 @@
+from ast import parse
 import re
 import sys
 
-Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "=="]
+Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "==", ","]
 
-Reserved = ["println", "readln", "while", "if", "else", "false", "true", "bool" ,"int", "string"]
+Reserved = ["println", "readln", "while", "if", "else", "false", "true", "bool" ,"int", "string", "return"]
+
+types = ["bool", "int", "string"]
 
 def get_type(token):
         if(token.isdigit() == True):
@@ -42,10 +45,13 @@ def get_type(token):
             return "OPENBLOCK"
         elif(token == "}"):
             return "CLOSEBLOCK"
+        elif token == ",":
+            return "COMMA"
 
 class SymbolTable():
     def __init__(self):
         self.symbtable = {}
+        self.functiontable = {}
 
     # Agora sao tuplas com format (valor, tipo)
     def getter(self, key):
@@ -75,6 +81,21 @@ class SymbolTable():
     def declared(self, key):
         if (key in self.symbtable):
             return True
+
+    # Funcoes sao tuplas com (args, commands, tipo)
+    def getFunc(self, key):
+        if key in self.functiontable.keys():
+            return self.functiontable[key]
+
+        else:
+            raise ValueError("Funcao {} não existe na Tabela".format(key))
+
+    # Funcoes sao tuplas com (args, commands, tipo)
+    def setFunc(self, key, args, commands, tipo):
+        if key not in self.functiontable.keys():
+            self.functiontable[key] = (args, commands, tipo)
+        else:
+            raise ValueError(f"ERRO: funcao ja {key} declarada")
 
 
 # Agora todos os nodes retornam tuplas e fazem operacoes com um elemento no indice 0 da tupla
@@ -172,29 +193,34 @@ class ReadNode(Node):
 class CommandNode(Node):
     def Evaluate(self, symbtable):
         for x in self.children:
-            x.Evaluate(symbtable)
+            if x.value == "return":
+                return x.Evaluate(symbtable)
+            else:
+                x.Evaluate(symbtable)
 
 class NoOp(Node):
     def __init__(self):
         pass
 
-    def Evaluate(self):
+    def Evaluate(self, symbtable):
         pass
 
-class WhileNode(Node): 
+class WhileNode(Node):
     def Evaluate(self, symbtable):
         while bool(self.children[0].Evaluate(symbtable)[0]) == True:
-            self.children[1].Evaluate(symbtable)
+            ret = self.children[1].Evaluate(symbtable)
+            if ret != None:
+                return ret
         
 class IfNode(Node): 
     def Evaluate(self, symbtable):
         if (self.children[0].Evaluate(symbtable)[1] == "string"):
             raise ValueError("ERRO: IF nao pode ser com somente uma string")
         if bool(self.children[0].Evaluate(symbtable)[0]) == True:
-            self.children[1].Evaluate(symbtable) 
+            return self.children[1].Evaluate(symbtable) 
         # Checa se tem else e roda ele
         elif len(self.children) == 3:
-            self.children[2].Evaluate(symbtable) 
+            return self.children[2].Evaluate(symbtable) 
 
 class BoolVal(Node):
     def Evaluate(self, symbtable):
@@ -206,6 +232,62 @@ class BoolVal(Node):
 class StringVal(Node):        
     def Evaluate(self,symbtable):
         return (self.value, "string")
+
+class FuncDec(Node):
+    def __init__(self, val, args, nodelist, type):
+        super().__init__(val=val, nodelist=nodelist)
+        self.type = type
+        self.args = args
+
+    #Funcoes sao tuplas (args, commands, tipo)
+    def Evaluate(self, symbtable):
+        # Seta funcao na symboltable de funcoes
+        symbtable.setFunc(self.value, self.args, self.children, self.type)
+
+class FuncCall(Node):
+    def Evaluate(self, symbtable):
+        # Pega a funcao da functable
+        funcReference = symbtable.getFunc(self.value)
+
+        # Pega o valor dos argumentos da funcao
+        # cria novo symboltable, pra funcao
+        localtable = SymbolTable()
+        # Copia as funcoes para a symboltable criada para manter referencia as funcoes declaradas
+        localtable.functiontable = symbtable.functiontable
+
+        #Funcoes sao tuplas (args, commands, tipo)
+        if len(self.children) == len(funcReference[0]):
+            # declara todos os argumentos em argRes.
+            for argReal, argDec in zip(self.children, funcReference[0]):
+                argEval = argReal.Evaluate(symbtable)
+
+                if argEval[1] != argDec.type:
+                    raise ValueError(f"ERRO: Funcao leva variavel de tipo {argDec.type}, mas foi passado {argEval[1]}")
+
+                # Declara com tipo
+                localtable.declare(argDec.value, argEval[1])
+                # Seta com valor
+                localtable.setter(argDec.value, argEval[0])
+
+        else:
+            raise ValueError(f"ERRO: Funcao leva {len(funcReference[0])} argumentos, mas foram passados {len(self.children)}")
+
+        # Func reference 2 guarda todos os commandos
+        for command in funcReference[1].children:
+            commandRet = command.Evaluate(localtable)
+
+            # Checa se chegou no return e se nao eh um return de funcao chamada dentro ou return de variavel
+            if (command.value == "return" or commandRet != None) and command.value not in localtable.functiontable.keys() and type(command) != Identifier:
+                # Checa se valor retornado eh igual ao tipo da funcao
+                if commandRet[1] != funcReference[2]:
+                    raise ValueError(f"ERRO: Return da funcao eh de tipo {funcReference[2]}, mas tentou retornar tipo {commandRet[1]}")
+
+                return commandRet
+
+
+class ReturnNode(Node):
+    def Evaluate(self, symbtable):
+        return self.children.Evaluate(symbtable)
 
 
 class Token:
@@ -279,6 +361,76 @@ class Parser():
         self.tokens = Tokenizer
 
     @staticmethod
+    def parseFuncDefBlock():
+        #Parser.tokens.selectNext()
+
+        functions = []
+
+        #Pegar todas as funcoes enquanto na for o final da arquivo
+        while(Parser.tokens.actual.type != "EOF"):
+
+            # function type
+            if (Parser.tokens.actual.type in types):
+                functype = Parser.tokens.actual.type
+                Parser.tokens.selectNext()
+                # function name
+                if (Parser.tokens.actual.type == "identifier"):
+                    funcname = Parser.tokens.actual.value
+                    funcargs = []
+                    Parser.tokens.selectNext()
+                    # function args if any
+                    if (Parser.tokens.actual.type == "OPENBR"):
+                        Parser.tokens.selectNext()
+                        # Procurar se o proximo token n for um fecha parenteses, temos argumentos
+                        if (Parser.tokens.actual.type != "CLOSEBR"):
+                            # Procurar se tem um argumento
+                            if(Parser.tokens.actual.type in types):
+                                vartype = Parser.tokens.actual.type
+                                Parser.tokens.selectNext()
+                                if (Parser.tokens.actual.type == "identifier"):
+                                    varname = Parser.tokens.actual.value
+                                else:
+                                    raise ValueError(f"ERRO: Esperava-se um idetificador mas recebeu {Parser.tokens.actual.value}")
+                                # Add argumento na lista
+                                funcargs.append(Identifier(varname,vartype))
+                                # Select Next espera virgula
+                                Parser.tokens.selectNext()
+                                # Depois de achar o primeiro arg, loopar enquanto existir virgulas para pegar os outros
+                                while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
+                                    # Select next espera tipo
+                                    Parser.tokens.selectNext()
+                                    # Se acha tipo
+                                    vartype = Parser.tokens.actual.type
+                                    # Select next espera identificador
+                                    Parser.tokens.selectNext()
+                                    if (Parser.tokens.actual.type == "identifier"):
+                                        varname = Parser.tokens.actual.value
+                                        # Prox token eh virgula ou fecha par
+                                        Parser.tokens.selectNext()
+                                    else:
+                                        raise ValueError(f"ERRO: Esperava-se um identificador mas recebeu {Parser.tokens.actual.value}")
+                                    # Add argumento na lista
+                                    funcargs.append(Identifier(varname,vartype))    
+                        # Se nao tiver fechar parenteses depois de tudo erro
+                        if (Parser.tokens.actual.type != "CLOSEBR"):
+                            raise ValueError(f"ERRO: Esperava-se ), mas recebeu: {Parser.tokens.actual.value}")
+                                
+                    else: 
+                        raise ValueError(f"ERRO: Sem ( depois de declaracao de {functype}")
+                    
+                    # Select next para entrar em parse command com token == {
+                    Parser.tokens.selectNext()
+                    functions.append(FuncDec(funcname, funcargs, Parser.parseCommand(), functype))
+                                
+
+                else:
+                    raise ValueError(f"ERRO: Declaracao de funcao {functype} sem nome")
+
+        return functions
+
+            
+
+    @staticmethod
     def parseBlock():
         #Parser.tokens.selectNext()
         nodes = []
@@ -297,7 +449,8 @@ class Parser():
     @staticmethod
     def parseCommand():
 
-        if (Parser.tokens.actual.type == "bool" or Parser.tokens.actual.type == "string" or Parser.tokens.actual.type == "int"):
+
+        if (Parser.tokens.actual.type in types):
             vartype = Parser.tokens.actual.type
             Parser.tokens.selectNext()
             if (Parser.tokens.actual.type == "identifier"):
@@ -318,10 +471,12 @@ class Parser():
                 raise ValueError(f"ERRO: Declaracao de {vartype} sem variavel")
 
         elif (Parser.tokens.actual.type == "identifier"):
-            result = Identifier(Parser.tokens.actual.value)
+            identName = Parser.tokens.actual.value
             Parser.tokens.selectNext()
-
+            # Se for = faz atrbuicao
             if (Parser.tokens.actual.type == "ASSIGN"):
+                result = Identifier(identName)
+
                 result = AssignOp("=", [result, Parser.parseOrExpression()])
 
                 if (Parser.tokens.actual.type == "ENDL"):
@@ -329,9 +484,43 @@ class Parser():
                     return result
 
                 else:
-                    raise ValueError("ERRO, esperava-se um fim de linha com ;")
+                    raise ValueError(f"ERRO, esperava-se um fim de linha com ; mas recebeu {Parser.tokens.actual.value}")
+
+            # Se for ( faz chamada de funcao
+            elif(Parser.tokens.actual.type == "OPENBR"):
+                args = []
+                # Seleciona o token subsequente do (
+                Parser.tokens.selectNext()
+                # Se for diferente de um fecha paretenses, pegar todos os argumentos
+                if (Parser.tokens.actual.type != "CLOSEBR"):
+                    # volta
+                    Parser.tokens.position -= len(Parser.tokens.actual.value)
+                    # Pega primeiro argumento
+                    # args.append(Parser.parseOrExpression())
+                    # Loopar enquanto tiver virgula
+                    # while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
+                    #     args.append(Parser.parseOrExpression())
+                    
+                    while(Parser.tokens.actual.type != "CLOSEBR"):
+                        args.append(Parser.parseOrExpression())
+
+                # Depois de tudo espera-se um ) e um ; em seguida
+                if(Parser.tokens.actual.type == "CLOSEBR"):
+                    result = FuncCall(identName, args)
+                    Parser.tokens.selectNext()
+                    if (Parser.tokens.actual.type == "ENDL"):
+                        Parser.tokens.selectNext()
+                        return result
+
+                    else:
+                        raise ValueError(f"ERRO, esperava-se um fim de linha com ; mas recebeu {Parser.tokens.actual.value}")
+                
+                else:
+                    raise ValueError(f"ERRO, esperava-se um ) mas recebeu {Parser.tokens.actual.value}")
+                
             else:
-                raise ValueError("ERRO, esperava-se uma atribuicao com =")
+                raise ValueError(f"ERRO, esperava-se uma atribuicao com = ou um abre parenteses (, mas recebeu {Parser.tokens.actual.type}")
+
         
         elif (Parser.tokens.actual.type == "println"): 
             result = PrintNode(Parser.tokens.actual.value, [Parser.parseOrExpression()])
@@ -341,7 +530,7 @@ class Parser():
                 return result
                 
             else:
-                raise ValueError("ERRO, esperava-se um fim de linha com ;")
+                raise ValueError(f"ERRO, esperava-se um fim de linha com ; mas recebeu {Parser.tokens.actual.value}")
 
         elif Parser.tokens.actual.type == "while":
             Parser.tokens.selectNext()
@@ -388,10 +577,24 @@ class Parser():
         elif (Parser.tokens.actual.type == "ENDL"):
             Parser.tokens.selectNext()
             # se so tiver ; faz nada
-            return NoOp(None)
+            return NoOp()
+
+        # Se for return
+        elif (Parser.tokens.actual.type == "return"):
+            # Cria return node com a expressao seguinte
+            result = ReturnNode(Parser.tokens.actual.value, Parser.parseOrExpression())
+            # Token depois do return deve ser ;
+            if (Parser.tokens.actual.type == "ENDL"):
+                Parser.tokens.selectNext()
+                return result
+                
+            else:
+                raise ValueError(f"ERRO, esperava-se um fim de linha com ; mas recebeu {Parser.tokens.actual.value}")
         
         # se nao cair em nenhum dos casos chama BLOCK
         else:
+            #Parser.tokens.selectNext()
+
             result = Parser.parseBlock()
             return result
             
@@ -506,8 +709,39 @@ class Parser():
             Parser.tokens.selectNext()
         
         elif(Parser.tokens.actual.type == "identifier"):
-            result = Identifier(Parser.tokens.actual.value)
+            identName = Parser.tokens.actual.value
             Parser.tokens.selectNext()
+            # Checa se eh chamada de funcao ou so uma variavel
+            # Se for funcao faz igual no command
+            if (Parser.tokens.actual.type == "OPENBR"):
+                args = []
+                # Seleciona o token subsequente do (
+                # Se for diferente de um fecha paretenses, pegar todos os argumentos
+                
+                Parser.tokens.selectNext()
+                if (Parser.tokens.actual.type != "CLOSEBR"):
+                    Parser.tokens.position -= len(Parser.tokens.actual.value)
+
+                    # Pega primeiro argumento
+                    # args.append(Parser.parseOrExpression())
+                    # , 4, 5, 6,
+                    # Loopar enquanto tiver virgula
+                    #print(f"Esse eh o token: {Parser.tokens.actual.value}")
+                    # while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
+                    #     args.append(Parser.parseOrExpression())
+                    while(Parser.tokens.actual.type != "CLOSEBR"):
+                        args.append(Parser.parseOrExpression())
+
+                # Depois de tudo espera-se um ) 
+                if(Parser.tokens.actual.type == "CLOSEBR"):
+                    result = FuncCall(identName, args)
+                    Parser.tokens.selectNext()
+                    # ;
+                else:
+                    raise ValueError(f"ERRO, esperava-se um ) mas recebeu {Parser.tokens.actual.value}")
+            # Se for variavel so cria node de variavel
+            else:        
+                result = Identifier(identName)
 
         elif Parser.tokens.actual.type == "NEG":
             result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
@@ -524,12 +758,14 @@ class Parser():
                 raise Exception('ERRO: parenteses errado em um readln')
 
         else:
-            raise Exception('ERRO')
+            raise Exception(f'ERRO: Token invalido em factor --> {Parser.tokens.actual.value}')
 
         return result
 
     @staticmethod
     def run(code):
+        ST = SymbolTable()
+
         nocommentstring = PrePro.filter(code.rstrip('\n'))
         nocommentstring = nocommentstring.replace("\n", "")
         Parser.tokens = Parser().tokens(origem = nocommentstring) 
@@ -537,15 +773,27 @@ class Parser():
         # Select next pra pegar o primeiro token
         Parser.tokens.selectNext()
 
-        compiled = Parser().parseBlock()
+        compiled = Parser().parseFuncDefBlock()
+
+        # Da evaluate nas funcoes declaradas
+        for node in compiled:
+            node.Evaluate(ST)
+
+        # Adicionar uma chamada ao main para rodar o programa
+        # Se nao tiver main da erro
+        if ("main" in ST.functiontable.keys()):
+            # compiled.append(ST.getFunc("main"))
+            FuncCall("main", []).Evaluate(ST)
+        else:
+            raise ValueError("ERRO: nao existe main no programa")
 
         # select next pois o programa sai em uma fechadura de } 
         # Parser.tokens.selectNext()
 
-        if Parser.tokens.actual.type == "EOF":
-            return compiled
-        else:
-            raise Exception('ERRO')
+        # if Parser.tokens.actual.type == "EOF":
+        #     return compiled.Evaluate(ST)
+        # else:
+        #     raise Exception('ERRO')
     
 class PrePro():
     @staticmethod
@@ -562,9 +810,9 @@ def main():
     if(len(sys.argv) < 2):
         raise Exception("Nao foi passado argumento pro arquivo")
 
-    ST = SymbolTable()
 
-    Parser().run(program).Evaluate(ST)
+
+    Parser().run(program)
 
 
 if __name__ == "__main__":

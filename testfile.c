@@ -1,17 +1,15 @@
-
+int soma(int x, int y)
 {
-    bool a;
-    int b;
-    int c;
-    
-    b = 32;
-    c = 32;
-    a = true;
-
-    if ((b && c) == a){
-    	println(1);
-    }else{
-    	println(2);
-    }
+    int res;
+    res = x + y;
+    return res;    
 }
 
+int main()
+{
+    int x;
+    soma(3,5);/*Ok fazer isso*/
+    x = soma(3,5);
+    println(x);
+   
+}
