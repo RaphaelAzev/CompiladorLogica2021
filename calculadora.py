@@ -57,7 +57,11 @@ class SymbolTable():
 
     def setter(self, key, value):
         if key in self.symbtable:
-            self.symbtable[key] = (value, self.symbtable[key][1])
+            # Casta pra true ou false dependendo do valor
+            if(self.symbtable[key][1] == "bool"):
+                self.symbtable[key] = (int(bool(value)), self.symbtable[key][1])
+            else:
+                self.symbtable[key] = (value, self.symbtable[key][1])
         else:
             raise ValueError("Variavel {} não existe na Tabela".format(key))
 
@@ -105,15 +109,15 @@ class BinOp(Node):
         elif (self.value == '-'):
             return (var1[0] - var2[0], "int")
         elif (self.value == '<'):
-            return (var1[0] < var2[0], "bool")
+            return (bool(var1[0]) < bool(var2[0]), "bool")
         elif (self.value == '>'):
-            return (var1[0] > var2[0], "bool")
+            return (bool(var1[0]) > bool(var2[0]), "bool")
         elif self.value == "==":
-            return (var1[0] == var2[0], "bool")
+            return (bool(var1[0]) == bool(var2[0]), "bool")
         elif self.value == "&&":
-            return (var1[0] and var2[0], "bool")
+            return (bool(var1[0]) and bool(var2[0]), "bool")
         elif self.value == "||":
-            return (var1[0] or var2[0], "bool")
+            return (bool(var1[0]) or bool(var2[0]), "bool")
 
 class UnOp(Node):
     def Evaluate(self, symbtable):
@@ -122,7 +126,7 @@ class UnOp(Node):
         elif (self.value == '-'):
             return (-(self.children[0].Evaluate(symbtable)[0]), "int")
         elif self.value == "!":
-            return  (not (self.children[0].Evaluate(symbtable)[0]), "bool")
+            return  (not bool((self.children[0].Evaluate(symbtable)[0])), "bool")
 
 class IntVal(Node):
     def Evaluate(self, symbtable):
@@ -192,8 +196,10 @@ class IfNode(Node):
 
 class BoolVal(Node):
     def Evaluate(self, symbtable):
-        return (bool(self.value), "bool")
-
+        if(self.value == "true"):
+            return (True, "bool")
+        else:
+            return (False, "bool")
 class StringVal(Node):        
     def Evaluate(self,symbtable):
         return (self.value, "string")
