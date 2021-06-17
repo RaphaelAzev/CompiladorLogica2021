@@ -1,8 +1,8 @@
 import re
 import sys
 
-Operators = ["+", "-", "*", "/", "(", ")", "="]
-Reserved = ["println"]
+Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "=="]
+Reserved = ["println", "readln", "while", "if", "else"]
 
 def get_type(token):
         if(token.isdigit() == True):
@@ -25,6 +25,22 @@ def get_type(token):
             return "ASSIGN"
         elif(token == ";"):
             return "ENDL"
+        elif(token == "=="):
+            return "EQUAL"
+        elif(token == ">"):
+            return "GREATER"
+        elif(token == "<"):
+            return "LESSER"
+        elif(token == "&&"):
+            return "AND"
+        elif(token == "||"):
+            return "OR"
+        elif(token == "!"):
+            return "NEG"
+        elif(token == "{"):
+            return "OPENBLOCK"
+        elif(token == "}"):
+            return "CLOSEBLOCK"
 
 class SymbolTable():
     def __init__(self):
@@ -58,6 +74,16 @@ class BinOp(Node):
             return self.children[0].Evaluate(symbtable) + self.children[1].Evaluate(symbtable)
         if (self.value == '-'):
             return self.children[0].Evaluate(symbtable) - self.children[1].Evaluate(symbtable)
+        if (self.value == '<'):
+            return self.children[0].Evaluate(symbtable) < self.children[1].Evaluate(symbtable)
+        if (self.value == '>'):
+            return self.children[0].Evaluate(symbtable) > self.children[1].Evaluate(symbtable)
+        if self.value == "==":
+            return self.children[0].Evaluate(symbtable) == self.children[1].Evaluate(symbtable)
+        if self.value == "&&":
+            return self.children[0].Evaluate(symbtable) and self.children[1].Evaluate(symbtable)
+        if self.value == "||":
+            return self.children[0].Evaluate(symbtable) or self.children[1].Evaluate(symbtable)
 
 class UnOp(Node):
     def Evaluate(self, symbtable):
@@ -65,6 +91,8 @@ class UnOp(Node):
             return +(self.children[0].Evaluate(symbtable))
         if (self.value == '-'):
             return -(self.children[0].Evaluate(symbtable))
+        elif self.value == "!":
+            return  not (self.children[0].Evaluate(symbtable))
 
 class IntVal(Node):
     def Evaluate(self, symbtable):
@@ -82,6 +110,10 @@ class PrintNode(Node):
     def Evaluate(self, symbtable):
         print(self.children[0].Evaluate(symbtable))
 
+class ReadNode(Node):
+    def Evaluate(self, symbtable):
+        return int(input())
+
 class CommandNode(Node):
     def Evaluate(self, symbtable):
         for x in self.children:
@@ -93,6 +125,20 @@ class NoOp(Node):
 
     def Evaluate(self):
         pass
+
+class WhileNode(Node): 
+    def Evaluate(self, symbtable):
+        while self.children[0].Evaluate(symbtable) == True:
+            self.children[1].Evaluate(symbtable)
+        
+class IfNode(Node): 
+    def Evaluate(self, symbtable):
+        if self.children[0].Evaluate(symbtable) == True:
+            self.children[1].Evaluate(symbtable) 
+        # Checa se tem else e roda ele
+        elif len(self.children) == 3:
+            self.children[2].Evaluate(symbtable) 
+
 
 class Token:
     def __init__(self, typetoken = None, valor = None):
@@ -138,6 +184,10 @@ class Tokenizer:
                     while(get_type(self.origin[self.position]) == self.actual.type and self.origin[self.position] not in Operators):
                         self.actual.value += self.origin[self.position] 
                         self.position += 1
+                        # Tratamento especial para n confundir == com =
+                        if (self.actual.value in Operators):
+                            self.actual.type = get_type(self.actual.value)
+                            break
                         if(self.position == len(self.origin)):
                             break
 
@@ -149,11 +199,18 @@ class Parser():
 
     @staticmethod
     def parseBlock():
-        Parser.tokens.selectNext()
+        #Parser.tokens.selectNext()
         nodes = []
-        while Parser.tokens.actual.type != "EOF":
-            nodes.append(Parser.parseCommand())
+        if Parser.tokens.actual.type == "OPENBLOCK":
+            Parser.tokens.selectNext()
+            while Parser.tokens.actual.type != "EOF" and Parser.tokens.actual.type != "CLOSEBLOCK":
+                nodes.append(Parser.parseCommand())
+            # Select next pra n confundir um bloco finalizado com final do programa
+            Parser.tokens.selectNext()
     
+        else:
+            raise ValueError("Nao existe uma abertura ou fechadura de bloco")
+
         return CommandNode("BLOCK", nodes)
 
     @staticmethod
@@ -164,7 +221,7 @@ class Parser():
             Parser.tokens.selectNext()
 
             if (Parser.tokens.actual.type == "ASSIGN"):
-                result = AssignOp("=", [result, Parser.parseExpression()])
+                result = AssignOp("=", [result, Parser.parseOrExpression()])
 
                 if (Parser.tokens.actual.type == "ENDL"):
                     Parser.tokens.selectNext()
@@ -176,7 +233,7 @@ class Parser():
                 raise ValueError("ERRO, esperava-se uma atribuicao com =")
         
         elif (Parser.tokens.actual.type == "println"): 
-            result = PrintNode(Parser.tokens.actual.value, [Parser.parseExpression()])
+            result = PrintNode(Parser.tokens.actual.value, [Parser.parseOrExpression()])
             
             if (Parser.tokens.actual.type == "ENDL"):
                 Parser.tokens.selectNext()
@@ -185,12 +242,106 @@ class Parser():
             else:
                 raise ValueError("ERRO, esperava-se um fim de linha com ;")
 
+        elif Parser.tokens.actual.type == "while":
+            Parser.tokens.selectNext()
+            if Parser.tokens.actual.type == "OPENBR":
+                # Cria condicao do while
+                cond = Parser.parseOrExpression()
+                if Parser.tokens.actual.type == "CLOSEBR":
+                    Parser.tokens.selectNext()
+                    # Cria o/s commando/s dentro do while
+                    commands = Parser.parseCommand()
+                    # Cria node do while
+                    result = WhileNode("while", [cond, commands])
+                    return result
+                else:
+                    raise ValueError("ERRO: nao fechou parenteses do while")
+            else:
+                raise ValueError("ERRO: nao abriu parenteses do while")
+        
+        elif Parser.tokens.actual.type == "if":
+            Parser.tokens.selectNext()
+            if Parser.tokens.actual.type == "OPENBR":
+                # Cria condicao do if
+                cond = Parser.parseOrExpression()
+                if Parser.tokens.actual.type == "CLOSEBR":
+                    Parser.tokens.selectNext()
+                    # Cria commandos
+                    commands = Parser.parseCommand()
+                    # Cria else se tiver
+                    if Parser.tokens.actual.type == 'else':
+                        Parser.tokens.selectNext()
+                        elseblock = Parser.parseCommand()
+                        result = IfNode("if", [cond, commands, elseblock])
+                        return result
+
+                    # Senao cria if sem else
+                    else:
+                        result = IfNode("if", [cond, commands])
+                        return result
+                else:
+                    raise ValueError("ERRO: nao fechou parenteses do if")
+            else:
+                raise ValueError("ERRO: nao abriu parenteses do if")
+
         elif (Parser.tokens.actual.type == "ENDL"):
             Parser.tokens.selectNext()
-            return result 
+            # se so tiver ; faz nada
+            return NoOp(None)
         
+        # se nao cair em nenhum dos casos chama BLOCK
         else:
-            raise ValueError("ERRO, esperava-se um fim de linha com ;")
+            result = Parser.parseBlock()
+            return result
+            
+
+    @staticmethod
+    def parseOrExpression():
+
+        result = Parser.parseAndExpression()
+
+        while(Parser.tokens.actual.type == "OR"):
+            if Parser.tokens.actual.type == "OR":
+                return BinOp(Parser.tokens.actual.value, [result, Parser.parseAndExpression()])
+        
+        return result
+        
+    @staticmethod
+    def parseAndExpression():
+
+        result = Parser.parseEqExpression()
+
+        while(Parser.tokens.actual.type == "AND"):
+            if Parser.tokens.actual.type == "AND":
+                return BinOp(Parser.tokens.actual.value, [result, Parser.parseEqExpression()])
+
+        return result
+
+    @staticmethod
+    def parseEqExpression():
+
+        result = Parser.parseRelExpression()
+
+        while(Parser.tokens.actual.type == "EQUAL"):
+            if Parser.tokens.actual.type == "EQUAL":
+                return BinOp(Parser.tokens.actual.value, [result, Parser.parseRelExpression()])
+
+        return result
+
+
+    @staticmethod
+    def parseRelExpression():
+
+        result = Parser.parseExpression()
+
+        while(Parser.tokens.actual.type == "GREATER" or Parser.tokens.actual.type == "LESSER"):
+            if Parser.tokens.actual.type == "GREATER":
+                return BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])
+            
+            if Parser.tokens.actual.type == "LESSER":
+                return BinOp(Parser.tokens.actual.value, [result, Parser.parseExpression()])\
+        
+        return result
 
     @staticmethod
     def parseExpression():
@@ -239,15 +390,29 @@ class Parser():
             result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
 
         elif(Parser.tokens.actual.type == "OPENBR"):
-            result = Parser.parseExpression()
+            result = Parser.parseOrExpression()
             if Parser.tokens.actual.type != "CLOSEBR":
-                raise Exception('ERRO')
+                raise Exception('ERRO: parenteses errado')
 
             Parser.tokens.selectNext()
         
         elif(Parser.tokens.actual.type == "identifier"):
             result = Identifier(Parser.tokens.actual.value)
             Parser.tokens.selectNext()
+
+        elif Parser.tokens.actual.type == "NOT":
+            result = UnOp(Parser.tokens.actual.value, [Parser.parseFactor()])
+
+        elif(Parser.tokens.actual.type == "readln"):
+            result = ReadNode()
+            Parser.tokens.selectNext()
+            if(Parser.tokens.actual.type == "OPENBR"):
+                Parser.tokens.selectNext()
+                if Parser.tokens.actual.type != "CLOSEBR":
+                    raise Exception('ERRO: parenteses errado em um readln')
+                Parser.tokens.selectNext()
+            else:
+                raise Exception('ERRO: parenteses errado em um readln')
 
         else:
             raise Exception('ERRO')
@@ -260,7 +425,13 @@ class Parser():
         nocommentstring = nocommentstring.replace("\n", "")
         Parser.tokens = Parser().tokens(origem = nocommentstring) 
 
+        # Select next pra pegar o primeiro token
+        Parser.tokens.selectNext()
+
         compiled = Parser().parseBlock()
+
+        # select next pois o programa sai em uma fechadura de } 
+        # Parser.tokens.selectNext()
 
         if Parser.tokens.actual.type == "EOF":
             return compiled
