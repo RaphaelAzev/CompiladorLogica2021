@@ -147,7 +147,12 @@ class AssignOp(Node):
         newValue = self.children[1].Evaluate(symbtable)
 
         # Checa se sao tipos iguais no assign
-        if type1 != newValue[1]:
+        cond1 = (type1 in ["int", "bool"] 
+                and newValue[1] == "string")
+        cond2 = (type1 == "string" 
+                and newValue[1] in ["int", "bool"])
+
+        if cond1 or cond2:
             raise ValueError(f"ERRO: Nao podemos operar {type1} com {newValue[1]}")
 
         symbtable.setter(varname, newValue[0])
@@ -174,12 +179,12 @@ class NoOp(Node):
 
 class WhileNode(Node): 
     def Evaluate(self, symbtable):
-        while self.children[0].Evaluate(symbtable)[1] == True:
+        while bool(self.children[0].Evaluate(symbtable)[0]) == True:
             self.children[1].Evaluate(symbtable)
         
 class IfNode(Node): 
     def Evaluate(self, symbtable):
-        if self.children[0].Evaluate(symbtable)[0] == True:
+        if bool(self.children[0].Evaluate(symbtable)[0]) == True:
             self.children[1].Evaluate(symbtable) 
         # Checa se tem else e roda ele
         elif len(self.children) == 3:
@@ -187,7 +192,7 @@ class IfNode(Node):
 
 class BoolVal(Node):
     def Evaluate(self, symbtable):
-        return (self.value, "bool")
+        return (bool(self.value), "bool")
 
 class StringVal(Node):        
     def Evaluate(self,symbtable):
@@ -536,7 +541,7 @@ class Parser():
 class PrePro():
     @staticmethod
     def filter(code):
-        nocommentstring = re.sub(re.compile("/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/",re.DOTALL ) ,"" ,code)
+        nocommentstring = re.sub(re.compile("/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/",re.DOTALL ) ,"" ,code).replace("\t", "")
         return nocommentstring
         
 
