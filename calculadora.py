@@ -431,6 +431,8 @@ class Parser():
                                 Parser.tokens.selectNext()
                                 if (Parser.tokens.actual.type == "COMMA"):
                                     Parser.tokens.selectNext()
+                                    if (Parser.tokens.actual.type == "CLOSEBR"):
+                                        raise ValueError("ERRO: Esperava-se uma algum valor depois da virgula")
 
                             else:
                                 raise ValueError(f"ERRO: Esperava-se um identificador mas recebeu {Parser.tokens.actual.value}")
