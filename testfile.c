@@ -1,7 +1,14 @@
-x = 3;
-y = 2;
-z = x + y;
-println(z);
-Println(z);
-printLn(z);
-PRINTLN(z);
+{
+    x = readln();
+    y = 0;
+    while(x < 0) {
+        x = x + 1;
+        y = y + 1;
+    }
+    println(x);
+
+    if(x == 0) {
+        x = x + 1;
+    }
+    println(x);
+}
