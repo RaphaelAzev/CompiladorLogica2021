@@ -336,8 +336,6 @@ class Tokenizer:
                 
                 if text not in Reserved:
                     self.actual = Token("identifier", text)
-                elif(text == "mais"):
-                    self
 
                 else:
                     self.actual = Token(text,text)
