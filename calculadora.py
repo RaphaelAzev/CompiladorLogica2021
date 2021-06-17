@@ -1,8 +1,8 @@
-from ast import parse
+#from ast import parse
 import re
 import sys
 
-Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "==", ","]
+Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "==", ",", "}", "{"]
 
 Reserved = ["println", "readln", "while", "if", "else", "false", "true", "bool" ,"int", "string", "return"]
 
@@ -336,8 +336,12 @@ class Tokenizer:
                 
                 if text not in Reserved:
                     self.actual = Token("identifier", text)
+                elif(text == "mais"):
+                    self
+
                 else:
                     self.actual = Token(text,text)
+
 
             else:
                 self.actual = Token(valor = self.origin[self.position], typetoken = get_type(self.origin[self.position]))
@@ -365,7 +369,6 @@ class Parser():
         #Parser.tokens.selectNext()
 
         functions = []
-
         #Pegar todas as funcoes enquanto na for o final da arquivo
         while(Parser.tokens.actual.type != "EOF"):
 
@@ -382,35 +385,56 @@ class Parser():
                     if (Parser.tokens.actual.type == "OPENBR"):
                         Parser.tokens.selectNext()
                         # Procurar se o proximo token n for um fecha parenteses, temos argumentos
-                        if (Parser.tokens.actual.type != "CLOSEBR"):
-                            # Procurar se tem um argumento
-                            if(Parser.tokens.actual.type in types):
-                                vartype = Parser.tokens.actual.type
-                                Parser.tokens.selectNext()
-                                if (Parser.tokens.actual.type == "identifier"):
-                                    varname = Parser.tokens.actual.value
-                                else:
-                                    raise ValueError(f"ERRO: Esperava-se um idetificador mas recebeu {Parser.tokens.actual.value}")
+                        # if (Parser.tokens.actual.type != "CLOSEBR"):
+                        #     # Procurar se tem um argumento
+                        #     if(Parser.tokens.actual.type in types):
+                        #         vartype = Parser.tokens.actual.type
+                        #         Parser.tokens.selectNext()
+                        #         if (Parser.tokens.actual.type == "identifier"):
+                        #             varname = Parser.tokens.actual.value
+                        #         else:
+                        #             raise ValueError(f"ERRO: Esperava-se um idetificador mas recebeu {Parser.tokens.actual.value}")
+                        #         # Add argumento na lista
+                        #         funcargs.append(Identifier(varname,vartype))
+                        #         # Select Next espera virgula
+                        #         Parser.tokens.selectNext()
+                        #         # Depois de achar o primeiro arg, loopar enquanto existir virgulas para pegar os outros
+                        #         while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
+                        #             # Select next espera tipo
+                        #             Parser.tokens.selectNext()
+                        #             # Se acha tipo
+                        #             vartype = Parser.tokens.actual.type
+                        #             # Select next espera identificador
+                        #             Parser.tokens.selectNext()
+                        #             if (Parser.tokens.actual.type == "identifier"):
+                        #                 varname = Parser.tokens.actual.value
+                        #                 # Prox token eh virgula ou fecha par
+                        #                 Parser.tokens.selectNext()
+                        #             else:
+                        #                 raise ValueError(f"ERRO: Esperava-se um identificador mas recebeu {Parser.tokens.actual.value}")
+                        #             # Add argumento na lista
+                        #             funcargs.append(Identifier(varname,vartype))    
+
+                        while(Parser.tokens.actual.type != "CLOSEBR"):
+                            # Se acha tipo
+                            vartype = Parser.tokens.actual.type
+                            
+                            # Select next espera identificador
+                            Parser.tokens.selectNext()
+                            if (Parser.tokens.actual.type == "identifier"):
+                                varname = Parser.tokens.actual.value
+                                # Prox token eh virgula ou fecha par
+                                
                                 # Add argumento na lista
-                                funcargs.append(Identifier(varname,vartype))
-                                # Select Next espera virgula
+                                funcargs.append(Identifier(varname,vartype)) 
+
                                 Parser.tokens.selectNext()
-                                # Depois de achar o primeiro arg, loopar enquanto existir virgulas para pegar os outros
-                                while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
-                                    # Select next espera tipo
+                                if (Parser.tokens.actual.type == "COMMA"):
                                     Parser.tokens.selectNext()
-                                    # Se acha tipo
-                                    vartype = Parser.tokens.actual.type
-                                    # Select next espera identificador
-                                    Parser.tokens.selectNext()
-                                    if (Parser.tokens.actual.type == "identifier"):
-                                        varname = Parser.tokens.actual.value
-                                        # Prox token eh virgula ou fecha par
-                                        Parser.tokens.selectNext()
-                                    else:
-                                        raise ValueError(f"ERRO: Esperava-se um identificador mas recebeu {Parser.tokens.actual.value}")
-                                    # Add argumento na lista
-                                    funcargs.append(Identifier(varname,vartype))    
+
+                            else:
+                                raise ValueError(f"ERRO: Esperava-se um identificador mas recebeu {Parser.tokens.actual.value}")
+
                         # Se nao tiver fechar parenteses depois de tudo erro
                         if (Parser.tokens.actual.type != "CLOSEBR"):
                             raise ValueError(f"ERRO: Esperava-se ), mas recebeu: {Parser.tokens.actual.value}")
@@ -425,6 +449,9 @@ class Parser():
 
                 else:
                     raise ValueError(f"ERRO: Declaracao de funcao {functype} sem nome")
+
+            else:
+                raise ValueError("ERRO: Sem tipo para uma funcao")
 
         return functions
 
@@ -456,6 +483,7 @@ class Parser():
             if (Parser.tokens.actual.type == "identifier"):
                 # EX: bool x // x = (None, bool);
                 result = Identifier(Parser.tokens.actual.value, vartype)
+                
                 Parser.tokens.selectNext()
                 if (Parser.tokens.actual.type == "ASSIGN"):
                     result = AssignOp("=", [result, Parser.parseOrExpression()])
@@ -726,7 +754,7 @@ class Parser():
                     # args.append(Parser.parseOrExpression())
                     # , 4, 5, 6,
                     # Loopar enquanto tiver virgula
-                    #print(f"Esse eh o token: {Parser.tokens.actual.value}")
+
                     # while(Parser.tokens.actual.type == "COMMA" and Parser.tokens.actual.type != "CLOSEBR"):
                     #     args.append(Parser.parseOrExpression())
                     while(Parser.tokens.actual.type != "CLOSEBR"):
