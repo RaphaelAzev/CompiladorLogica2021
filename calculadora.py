@@ -109,15 +109,15 @@ class BinOp(Node):
         elif (self.value == '-'):
             return (var1[0] - var2[0], "int")
         elif (self.value == '<'):
-            return (bool(var1[0]) < bool(var2[0]), "bool")
+            return (bool(var1[0] < var2[0]), "bool")
         elif (self.value == '>'):
-            return (bool(var1[0]) > bool(var2[0]), "bool")
+            return (bool(var1[0] > var2[0]), "bool")
         elif self.value == "==":
-            return (bool(var1[0]) == bool(var2[0]), "bool")
+            return (bool(var1[0] == var2[0]), "bool")
         elif self.value == "&&":
-            return (bool(var1[0]) and bool(var2[0]), "bool")
+            return (bool(var1[0] and var2[0]), "bool")
         elif self.value == "||":
-            return (bool(var1[0]) or bool(var2[0]), "bool")
+            return (bool(var1[0] or var2[0]), "bool")
 
 class UnOp(Node):
     def Evaluate(self, symbtable):
