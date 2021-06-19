@@ -1,7 +1,7 @@
 import re
 import sys
 
-Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "=="]
+Operators = ["+", "-", "*", "/", "(", ")", "<", ">", "||", "&&", "!", "==", "{", "}"]
 
 Reserved = ["println", "readln", "while", "if", "else", "false", "true", "bool" ,"int", "string"]
 
@@ -43,14 +43,135 @@ def get_type(token):
         elif(token == "}"):
             return "CLOSEBLOCK"
 
+
+class ASMBgen():
+    # String pra guardar o codigo assembly gerado pelo compilador
+    generatedCode = ""
+
+    # String pra guardar o init padrao fornecido pelo arquivo no roteiro 8
+    defaultStart = """
+; constantes
+SYS_EXIT equ 1
+SYS_READ equ 3
+SYS_WRITE equ 4
+STDIN equ 0
+STDOUT equ 1
+True equ 1
+False equ 0
+
+segment .data
+
+segment .bss  ; variaveis
+  res RESB 1
+
+section .text
+  global _start
+
+print:  ; subrotina print
+
+  PUSH EBP ; guarda o base pointer
+  MOV EBP, ESP ; estabelece um novo base pointer
+
+  MOV EAX, [EBP+8] ; 1 argumento antes do RET e EBP
+  XOR ESI, ESI
+
+print_dec: ; empilha todos os digitos
+  MOV EDX, 0
+  MOV EBX, 0x000A
+  DIV EBX
+  ADD EDX, '0'
+  PUSH EDX
+  INC ESI ; contador de digitos
+  CMP EAX, 0
+  JZ print_next ; quando acabar pula
+  JMP print_dec
+
+print_next:
+  CMP ESI, 0
+  JZ print_exit ; quando acabar de imprimir
+  DEC ESI
+
+  MOV EAX, SYS_WRITE
+  MOV EBX, STDOUT
+
+  POP ECX
+  MOV [res], ECX
+  MOV ECX, res
+
+  MOV EDX, 1
+  INT 0x80
+  JMP print_next
+
+print_exit:
+  POP EBP
+  RET
+
+; subrotinas if/while
+binop_je:
+  JE binop_true
+  JMP binop_false
+
+binop_jg:
+  JG binop_true
+  JMP binop_false
+
+binop_jl:
+  JL binop_true
+  JMP binop_false
+
+binop_false:
+  MOV EBX, False
+  JMP binop_exit
+binop_true:
+  MOV EBX, True
+binop_exit:
+  RET
+
+_start:
+
+PUSH EBP ; guarda o base pointer
+MOV EBP, ESP ; estabelece um novo base pointer
+
+"""
+
+    defaultEnd = """
+; interrupcao de saida
+POP EBP
+MOV EAX, 1
+INT 0x80
+"""
+    
+    @staticmethod
+    def NodeAdd(NodeCode):
+        # Soma codigo do node ao codigo gerado pelo compilador
+        ASMBgen.generatedCode += NodeCode + "\n"
+
+    @staticmethod
+    def WriteAll():
+        with open ("compiled.nasm", 'w') as f:
+            # Escreve o inicio padrao + o codigo + o final padrao em um arquivo
+            f.write(ASMBgen.defaultStart + ASMBgen.generatedCode + ASMBgen.defaultEnd)
+
 class SymbolTable():
     def __init__(self):
         self.symbtable = {}
+        # nova table pra guardar os deslocamentos
+        self.deslocateTable = {}
+        # variavel que representa o deslocamento
+        self.deslocate = 0
 
     # Agora sao tuplas com format (valor, tipo)
     def getter(self, key):
         if key in self.symbtable.keys():
             return self.symbtable[key]
+
+        else:
+            raise ValueError("Variavel {} não existe na Tabela".format(key))
+
+    # Funcao pra pegar o deslocamento
+    def getDeslocate(self, key):
+        if key in self.deslocateTable.keys():
+            return self.deslocateTable[key]
 
         else:
             raise ValueError("Variavel {} não existe na Tabela".format(key))
@@ -63,8 +184,12 @@ class SymbolTable():
 
     # Declaracao de variavel, nao da valor mas da um tipo para a chave
     def declare(self, key, type):
+        # Quando criar variavel, desloca 4 
+        self.deslocate += 4
         if (not self.declared(key)):
             self.symbtable[key] = (None, type)
+            # Salva deslocamento pra essa variavel na tabela
+            self.deslocateTable[key] = self.deslocate
         else:
             raise ValueError(f"ERRO: variavel ja {key} declarada")
 
@@ -75,6 +200,9 @@ class SymbolTable():
 
 # Agora todos os nodes retornam tuplas e fazem operacoes com um elemento no indice 0 da tupla
 class Node():
+    
+    node_id = 0
+
     def __init__(self, val = None, nodelist = None):
         self.value = val
         self.children = nodelist
@@ -84,45 +212,78 @@ class Node():
 
 class BinOp(Node):
     def Evaluate(self, symbtable):
+        # Dar evaluates antes pra n repetir e escrever varios assemblies
+        c1eval = self.children[0].Evaluate(symbtable)
+
+        ASMBgen.NodeAdd("PUSH EBX")
+
+        c2eval = self.children[1].Evaluate(symbtable)
+
+        ASMBgen.NodeAdd("POP EAX")
+
         # Checa se esta dentro da combinacao de tipos permitida
-        cond1 = (self.children[0].Evaluate(symbtable)[1] in ["int", "bool"] 
-                and self.children[1].Evaluate(symbtable)[1] == "string")
-        cond2 = (self.children[0].Evaluate(symbtable)[1] == "string" 
-                and self.children[1].Evaluate(symbtable)[1] in ["int", "bool"])
+        cond1 = (c1eval[1] in ["int", "bool"] and c2eval[1] == "string")
+        cond2 = (c1eval[1] == "string" and c2eval[1] in ["int", "bool"])
 
         if (cond1 or cond2):
             raise ValueError(f"ERRO: Nao se pode operar {self.children[0].Evaluate(symbtable)[1]} com {self.children[1].Evaluate(symbtable)[1]}")
 
         if (self.value == '*'):
-            return (self.children[0].Evaluate(symbtable)[0] * self.children[1].Evaluate(symbtable)[0], "int")
+            ASMBgen.NodeAdd("IMUL EBX")
+            ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] * c2eval[0], "int")
         elif (self.value == '/'):
-            return (self.children[0].Evaluate(symbtable)[0] // self.children[1].Evaluate(symbtable)[0], "int")
+            ASMBgen.NodeAdd("IDIV EBX")
+            ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] // c2eval[0], "int")
         elif (self.value == '+'):
-            return (self.children[0].Evaluate(symbtable)[0] + self.children[1].Evaluate(symbtable)[0], "int")
+            ASMBgen.NodeAdd("ADD EAX, EBX")
+            ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] + c2eval[0], "int")
         elif (self.value == '-'):
-            return (self.children[0].Evaluate(symbtable)[0] - self.children[1].Evaluate(symbtable)[0], "int")
+            ASMBgen.NodeAdd("SUB EAX, EBX")
+            ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] - c2eval[0], "int")
         elif (self.value == '<'):
-            return (self.children[0].Evaluate(symbtable)[0] < self.children[1].Evaluate(symbtable)[0], "bool")
+            ASMBgen.NodeAdd("CMP EAX, EBX")
+            ASMBgen.NodeAdd("CALL binop_jl")
+            return (c1eval[0] < c2eval[0], "bool")
         elif (self.value == '>'):
-            return (self.children[0].Evaluate(symbtable)[0] > self.children[1].Evaluate(symbtable)[0], "bool")
+            ASMBgen.NodeAdd("CMP EAX, EBX")
+            ASMBgen.NodeAdd("CALL binop_jg")
+            return (c1eval[0] > c2eval[0], "bool")
         elif self.value == "==":
-            return (self.children[0].Evaluate(symbtable)[0] == self.children[1].Evaluate(symbtable)[0], "bool")
+            ASMBgen.NodeAdd("CMP EAX, EBX")
+            ASMBgen.NodeAdd("CALL binop_je")
+            return (c1eval[0] == c2eval[0], "bool")
         elif self.value == "&&":
-            return (self.children[0].Evaluate(symbtable)[0] and self.children[1].Evaluate(symbtable)[0], "bool")
+            ASMBgen.NodeAdd("OR EBX, EAX")
+            #ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] and c2eval[0], "bool")
         elif self.value == "||":
-            return (self.children[0].Evaluate(symbtable)[0] or self.children[1].Evaluate(symbtable)[0], "bool")
+            ASMBgen.NodeAdd("AND EBX, EAX")
+            #ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (c1eval[0] or c2eval[0], "bool")
 
 class UnOp(Node):
     def Evaluate(self, symbtable):
+        c1eval = self.children[0].Evaluate(symbtable)
+
         if (self.value == '+'):
-            return (+(self.children[0].Evaluate(symbtable)[0]), "int")
+            return (+(c1eval[0]), "int")
         elif (self.value == '-'):
-            return (-(self.children[0].Evaluate(symbtable)[0]), "int")
+            ASMBgen.NodeAdd(f"MOV EAX, {c1eval[0]}")
+            ASMBgen.NodeAdd("MOV EBX, -1")
+            ASMBgen.NodeAdd("IMUL EBX")
+            ASMBgen.NodeAdd("MOV EBX, EAX")
+            return (-(c1eval[0]), "int")
         elif self.value == "!":
-            return  (not (self.children[0].Evaluate(symbtable)[0]), "bool")
+            ASMBgen.NodeAdd("NEG EBX")
+            return  (not (c1eval[0]), "bool")
 
 class IntVal(Node):
     def Evaluate(self, symbtable):
+        ASMBgen.NodeAdd(f"MOV EBX, {int(self.value)}")
         return (int(self.value), "int")
 
 class Identifier(Node):
@@ -131,8 +292,17 @@ class Identifier(Node):
         self.type = type
 
     def Evaluate(self, symbtable):
+        # Pra checar se eh declaracao ou nao
+        declared_this = 0
         if (self.type != None):
+            declared_this = 1
             symbtable.declare(self.value, self.type)
+            ASMBgen.NodeAdd(f"PUSH DWORD 0 ; Dim {self.value} as {self.type} [EBP-{symbtable.getDeslocate(self.value)}]")
+
+        # Se nao eh declacao roda esse assembly
+        if (declared_this == 0):
+            ASMBgen.NodeAdd(f"MOV EBX, [EBP-{symbtable.getDeslocate(self.value)}]")
+            
         return symbtable.getter(self.value)
 
 class AssignOp(Node):
@@ -148,10 +318,14 @@ class AssignOp(Node):
             raise ValueError(f"ERRO: Nao podemos operar {type1} com {newValue[1]}")
 
         symbtable.setter(varname, newValue[0])
+        ASMBgen.NodeAdd(f"MOV [EBP-{symbtable.getDeslocate(varname)}], EBX")
 
 class PrintNode(Node):
     def Evaluate(self, symbtable):
         print(self.children[0].Evaluate(symbtable)[0])
+        ASMBgen.NodeAdd("PUSH EBX")
+        ASMBgen.NodeAdd("CALL print")
+        ASMBgen.NodeAdd("POP EBX")
 
 class ReadNode(Node):
     def Evaluate(self, symbtable):
@@ -170,20 +344,61 @@ class NoOp(Node):
         pass
 
 class WhileNode(Node): 
+    def __init__(self, val = None, nodelist = None):
+        self.value = val
+        self.children = nodelist
+        self.node_id = Node.node_id + 1
+        Node.node_id += 1 
+
+
     def Evaluate(self, symbtable):
-        while self.children[0].Evaluate(symbtable) == True:
+        ASMBgen.NodeAdd(f"LABEL_WHILE{self.node_id}:")
+        self.children[0].Evaluate(symbtable)
+        ASMBgen.NodeAdd("CMP EBX, False")
+        ASMBgen.NodeAdd(f"JE LABEL_WEND{self.node_id}")
+        #self.children[1].Evaluate(symbtable)
+
+        while self.children[0].Evaluate(symbtable)[0] == True:
             self.children[1].Evaluate(symbtable)
         
+        ASMBgen.NodeAdd(f"JMP LABEL_WHILE{self.node_id}")
+        ASMBgen.NodeAdd(f"LABEL_WEND{self.node_id}:")
+
 class IfNode(Node): 
+    def __init__(self, val = None, nodelist = None):
+        self.value = val
+        self.children = nodelist
+        self.node_id = Node.node_id + 1
+        Node.node_id += 1               
+
     def Evaluate(self, symbtable):
-        if self.children[0].Evaluate(symbtable) == True:
+        c1eval = self.children[0].Evaluate(symbtable)
+        ASMBgen.NodeAdd("CMP EBX, False")
+        # Checa se existe else pra criar label
+        if len(self.children) == 3:
+            ASMBgen.NodeAdd(f"JE LABEL_ELSE{self.node_id}")
+        else:
+            ASMBgen.NodeAdd(f"JE LABEL_ENDIF{self.node_id}")
+
+        # So gera oq esta dentro do if se a condicao for verdade
+        if c1eval[0] == True:
             self.children[1].Evaluate(symbtable) 
+            ASMBgen.NodeAdd(f"JMP LABEL_ENDIF{self.node_id}")
         # Checa se tem else e roda ele
         elif len(self.children) == 3:
+            ASMBgen.NodeAdd(f"LABEL_ELSE{self.node_id}:")
             self.children[2].Evaluate(symbtable) 
+
+        ASMBgen.NodeAdd(f"LABEL_ENDIF{self.node_id}:")
 
 class BoolVal(Node):
     def Evaluate(self, symbtable):
+        if(self.value == "true"):
+            ASMBgen(f"MOV EBX, True")
+            return(True, "bool")
+        elif(self.value == "false"):
+            ASMBgen(f"MOV EBX, False")
+            return(False,"bool")
         return (self.value, "bool")
 
 class StringVal(Node):        
@@ -548,6 +763,7 @@ def main():
     ST = SymbolTable()
 
     Parser().run(program).Evaluate(ST)
+    ASMBgen.WriteAll()
 
 
 if __name__ == "__main__":
